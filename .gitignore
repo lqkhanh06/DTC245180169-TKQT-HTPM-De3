@@ -1,5 +1,7 @@
-# Environment variables
+# Environment variables and credentials
 .env
+mysql-exporter.cnf
+.my.cnf
 
 # Data directories (if mounted locally)
 data/

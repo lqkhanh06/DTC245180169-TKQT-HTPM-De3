@@ -1,0 +1,5 @@
+[client]
+user = wordpress_user
+password = your_secure_password
+host = mysql
+port = 3306

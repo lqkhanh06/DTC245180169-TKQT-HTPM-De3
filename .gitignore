@@ -1,0 +1,10 @@
+# Environment variables
+.env
+
+# Data directories (if mounted locally)
+data/
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db

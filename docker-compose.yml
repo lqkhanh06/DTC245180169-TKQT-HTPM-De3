@@ -1,0 +1,106 @@
+services:
+  # ========================================================
+  # 1. DATABASE SERVICE (MySQL 8.0)
+  # ========================================================
+  mysql:
+    image: mysql:8.0
+    container_name: mysql_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    # HARDENING: Network Isolation - Chỉ nằm trong backend_net, KHÔNG mở port ra ngoài host
+    networks:
+      - backend_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ========================================================
+  # 2. WEB APPLICATION SERVICE (WordPress)
+  # ========================================================
+  wordpress:
+    image: wordpress:latest
+    container_name: wordpress_app
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: ${WORDPRESS_DB_HOST}
+      WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME}
+      WORDPRESS_DB_USER: ${WORDPRESS_DB_USER}
+      WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD}
+      WORDPRESS_TABLE_PREFIX: ${WORDPRESS_TABLE_PREFIX}
+      WORDPRESS_CONFIG_EXTRA: |
+        define('FORCE_SSL_ADMIN', true);
+        if (isset($$_SERVER['HTTP_X_FORWARDED_PROTO']) && $$_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+            $$_SERVER['HTTPS'] = 'on';
+        }
+    volumes:
+      - wordpress_data:/var/www/html
+    networks:
+      - frontend_net
+      - backend_net
+
+  # ========================================================
+  # 3. DATABASE MANAGEMENT TOOL (phpMyAdmin)
+  # ========================================================
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: phpmyadmin_tool
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      PMA_HOST: ${PMA_HOST}
+      PMA_PORT: ${PMA_PORT}
+      UPLOAD_LIMIT: 64M
+    networks:
+      - frontend_net
+      - backend_net
+
+  # ========================================================
+  # 4. REVERSE PROXY & SECURITY (Nginx)
+  # ========================================================
+  nginx:
+    image: nginx:alpine
+    container_name: nginx_proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"       # WordPress HTTP (Redirect to 443)
+      - "443:443"     # WordPress HTTPS (Self-signed SSL)
+      - "8080:8080"   # phpMyAdmin HTTP (Redirect to 8443)
+      - "8443:8443"   # phpMyAdmin HTTPS (Self-signed SSL)
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    networks:
+      - frontend_net
+    depends_on:
+      - wordpress
+      - phpmyadmin
+
+# ========================================================
+# NETWORKS CONFIGURATION (Network Isolation - Hardening)
+# ========================================================
+networks:
+  frontend_net:
+    driver: bridge
+  backend_net:
+    driver: bridge
+
+# ========================================================
+# VOLUMES CONFIGURATION (Persistent Storage)
+# ========================================================
+volumes:
+  mysql_data:
+  wordpress_data:
